@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Person Counter — Web Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial; display:flex; flex-direction:column; align-items:center; gap:12px; padding:18px; }
+    #video { border-radius:12px; transform: scaleX(-1); } /* mirror for UX */
+    canvas { position:absolute; left:0; top:0; pointer-events:none; }
+    .frame { position:relative; display:inline-block; }
+    .counter { font-size:1.1rem; padding:6px 10px; background:#111; color:#fff; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <h1>Person Counter (browser)</h1>
+  <div class="counter" id="count">Loading model…</div>
+
+  <div class="frame">
+    <video id="video" width="640" height="480" autoplay playsinline></video>
+    <canvas id="overlay" width="640" height="480"></canvas>
+  </div>
+
+  <!-- TensorFlow.js and coco-ssd -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.6.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+  <script>
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
+    const countEl = document.getElementById('count');
+
+    async function enableCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+      video.srcObject = stream;
+      return new Promise(resolve => video.onloadedmetadata = resolve);
+    }
+
+    async function main() {
+      await enableCamera();
+      const model = await cocoSsd.load(); // loads pretrained COCO-SSD
+      countEl.textContent = 'Model loaded — detecting...';
+
+      async function detectFrame() {
+        const predictions = await model.detect(video, 10); // up to 10 detections
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        // filter for 'person' classes only
+        const persons = predictions.filter(p => p.class === 'person' && p.score > 0.45);
+        // draw boxes
+        persons.forEach(p => {
+          const [x, y, w, h] = p.bbox;
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = 'lime';
+          ctx.strokeRect(x, y, w, h);
+          ctx.font = '16px sans-serif';
+          ctx.fillStyle = 'lime';
+          ctx.fillText(`${(p.score*100).toFixed(0)}%`, x, y > 12 ? y - 6 : y + 12);
+        });
+
+        countEl.textContent = `Persons: ${persons.length}`;
+        requestAnimationFrame(detectFrame);
+      }
+
+      detectFrame();
+    }
+
+    main().catch(err => {
+      console.error(err);
+      countEl.textContent = 'Error: ' + err.message;
+    });
+  </script>
+</body>
+</html>
